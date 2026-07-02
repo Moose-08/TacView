@@ -1,0 +1,6 @@
+node_modules/
+build/
+extension/app/
+overlay-config.json
+.claude/
+.playwright-mcp/

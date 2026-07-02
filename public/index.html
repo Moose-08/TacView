@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TACVIEW // TACTICAL COMMAND</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/theme.css">
+</head>
+<body>
+  <div id="scanlines" aria-hidden="true"></div>
+
+  <header id="topbar">
+    <div class="topbar-left">
+      <div class="app-title">TAC<span class="accent">▮</span>VIEW</div>
+      <div class="app-sub">TACTICAL DATA LINK</div>
+    </div>
+    <div class="topbar-center">
+      <div id="mission-status" class="status-chip">STANDBY</div>
+    </div>
+    <div class="topbar-right">
+      <div class="link-block">
+        <span class="link-label">UPLINK</span>
+        <span id="conn-status" class="conn-dot offline" title="Connection to localhost:8111"></span>
+        <span id="conn-text">SEARCHING</span>
+      </div>
+      <div class="link-block">
+        <span class="link-label">ZULU</span>
+        <span id="clock">--:--:--</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="layout">
+    <aside id="panel-left" class="panel corners">
+      <div class="panel-title">VEHICLE TELEMETRY <span id="vehicle-name" class="panel-title-sub"></span></div>
+      <div id="telemetry-primary" class="tele-grid"></div>
+      <div class="panel-title minor">SYSTEMS</div>
+      <div id="telemetry-systems" class="tele-grid small"></div>
+      <div class="panel-title minor">FUEL</div>
+      <div class="fuel-wrap">
+        <div class="bar-track"><div id="fuel-bar" class="bar-fill"></div></div>
+        <div id="fuel-text" class="bar-text">— / —</div>
+      </div>
+      <div class="panel-title minor">COMPASS</div>
+      <canvas id="compass" width="260" height="56"></canvas>
+      <div id="no-vehicle" class="dim-note hidden">NO VEHICLE FEED — HANGAR / SPECTATOR</div>
+      <div class="panel-title minor">THREAT BOARD <span id="threat-count" class="panel-title-sub"></span></div>
+      <div class="threat-head">
+        <span class="ti">#</span><span class="tt">TYP</span><span class="tr">RNG</span>
+        <span class="tb">BRG</span><span class="ts">SEC</span><span class="th">ASP</span>
+      </div>
+      <div id="threat-list"></div>
+      <div class="panel-title minor">NAV WAYPOINTS
+        <button id="wp-clear" class="mini-btn" title="Remove all waypoints">CLR</button>
+      </div>
+      <div id="wp-list"></div>
+    </aside>
+
+    <section id="map-section" class="corners">
+      <div id="map-toolbar">
+        <span class="tool-hint">SCROLL: ZOOM &nbsp;·&nbsp; DRAG: PAN &nbsp;·&nbsp; DBL-CLICK: RESET</span>
+        <label class="toggle"><input type="checkbox" id="opt-grid" checked><span>GRID</span></label>
+        <label class="toggle"><input type="checkbox" id="opt-labels" checked><span>LABELS</span></label>
+        <label class="toggle"><input type="checkbox" id="opt-trail" checked><span>TRAIL</span></label>
+        <label class="toggle"><input type="checkbox" id="opt-follow"><span>FOLLOW</span></label>
+        <button id="btn-overlay" class="tool-btn" title="Always-on-top overlay. Launches the native overlay when the TACVIEW server is running; shift+click for the in-browser PiP window. Game must be in borderless/windowed mode.">OVERLAY</button>
+        <button id="btn-overlay-cfg" class="tool-btn hidden" title="Configure native overlay widgets (applies live)">⚙</button>
+      </div>
+      <div id="overlay-cfg-panel" class="hidden"></div>
+      <canvas id="tacmap"></canvas>
+      <div id="map-readout"></div>
+      <div id="map-offline" class="map-overlay-msg hidden">
+        <div class="big">NO SIGNAL</div>
+        <div>AWAITING GAME UPLINK ON LOCALHOST:8111</div>
+      </div>
+    </section>
+
+    <aside id="panel-right" class="panel corners">
+      <div class="tabs">
+        <button class="tab active" data-tab="log">BATTLE LOG</button>
+        <button class="tab" data-tab="chat">COMMS</button>
+      </div>
+      <div id="tab-log" class="tab-body feed"></div>
+      <div id="tab-chat" class="tab-body feed hidden"></div>
+    </aside>
+  </main>
+
+  <footer id="statusbar">
+    <span id="sb-map">MAP: —</span>
+    <span id="sb-objects">CONTACTS: 0</span>
+    <span id="sb-gen">GEN: —</span>
+    <span class="sb-right">TACVIEW v0.1 // LOCAL DATA LINK ONLY</span>
+  </footer>
+
+  <script src="js/api.js"></script>
+  <script src="js/tacmap.js"></script>
+  <script src="js/threats.js"></script>
+  <script src="js/waypoints.js"></script>
+  <script src="js/telemetry.js"></script>
+  <script src="js/feed.js"></script>
+  <script src="js/overlay.js"></script>
+  <script src="js/overlaycfg.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
