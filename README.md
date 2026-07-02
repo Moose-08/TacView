@@ -16,7 +16,10 @@ it's not a wallhack, just a better map.
 ## Running it
 
 Grab `TACVIEW.exe` from the releases page and run it. It starts a small local
-server and opens the app in your browser. That's the whole install.
+server, opens the app in your browser, and sits in the system tray - no
+console window. Right-click the tray icon to open the app, launch the
+overlay, or quit. Running the exe again while it's up just reopens the app.
+That's the whole install.
 
 If you'd rather run from source you need Node 18 or newer:
 
@@ -37,8 +40,11 @@ in. The only dependency is rcedit, used at build time to set the icon.
 The OVERLAY button opens a small always-on-top window with waypoint steering
 (an arrow that points where you need to turn), the nearest threat, and your
 speed/alt/heading. The gear button next to it picks which widgets show, plus
-opacity, text size, and a callsign filter for the kill feed. Changes apply
-while the overlay is open.
+opacity, text size, nav and text colors, and a callsign filter for the kill
+feed. Changes apply while the overlay is open. There's also a nav popout
+option that moves the waypoint steering into its own little window, so you
+can park the arrow near your crosshair and keep the rest in a corner - both
+windows remember their positions separately.
 
 Two things to know: the game has to run in borderless or windowed mode
 (exclusive fullscreen can't be overlaid by anything), and the overlay is a

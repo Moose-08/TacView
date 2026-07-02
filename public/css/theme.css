@@ -320,6 +320,18 @@ html, body {
   font-size: 11px;
   padding: 3px 6px;
 }
+.cfg-row.swatches { gap: 6px; }
+.sw-label { font-size: 10px; color: var(--text-dim); width: 74px; }
+.sw {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  display: inline-block;
+}
+.sw:hover { border-color: var(--text); }
+.sw.sel { border: 2px solid #fff; box-shadow: 0 0 6px rgba(255,255,255,0.4); }
+
 .cfg-presets { display: flex; gap: 5px; margin-bottom: 8px; }
 .cfg-preset {
   flex: 1;

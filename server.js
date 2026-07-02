@@ -34,8 +34,13 @@ const DEFAULT_OVERLAY_CONFIG = {
   opacity: 75,
   fontScale: 100,
   playerName: '',
+  navColor: '#35c4e8',
+  textColor: '#29ff9e',
+  navPopout: false,
   left: 80,
   top: 80,
+  navLeft: 80,
+  navTop: 280,
 };
 
 function readOverlayConfig() {
@@ -111,30 +116,54 @@ function handleNavSync(req, res) {
   res.end(JSON.stringify(navState));
 }
 
-function overlayScriptPath() {
-  if (!sea) return path.join(__dirname, 'overlay-native.ps1');
-  const target = path.join(os.tmpdir(), 'tacview-overlay.ps1');
-  const data = Buffer.from(sea.getAsset('overlay-native.ps1'));
+function extractAsset(assetKey, filename) {
+  const target = path.join(os.tmpdir(), filename);
+  const data = Buffer.from(sea.getAsset(assetKey));
   if (!fs.existsSync(target) || !fs.readFileSync(target).equals(data)) {
     fs.writeFileSync(target, data);
   }
   return target;
 }
 
+function overlayScriptPath() {
+  if (!sea) return path.join(__dirname, 'overlay-native.ps1');
+  return extractAsset('overlay-native.ps1', 'tacview-overlay.ps1');
+}
+
+function spawnDetached(args) {
+  const child = spawn('cmd.exe', ['/c', 'start', '""', '/min', ...args],
+    { detached: true, stdio: 'ignore', windowsVerbatimArguments: true, windowsHide: true });
+  child.unref();
+}
+
+function startTray() {
+  const trayPath = extractAsset('assets/tray.ps1', 'tacview-tray.ps1');
+  spawnDetached(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
+    '-File', `"${trayPath}"`, '-Port', String(PORT), '-IconPath', `"${process.execPath}"`]);
+}
+
+function openBrowser() {
+  spawnDetached([`http://localhost:${PORT}`]);
+}
+
 function handleOverlayLaunch(res) {
   try {
-    const scriptPath = overlayScriptPath();
-    const child = spawn('cmd.exe',
-      ['/c', 'start', '""', '/min', 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-        '-WindowStyle', 'Hidden', '-File', `"${scriptPath}"`],
-      { detached: true, stdio: 'ignore', windowsVerbatimArguments: true });
-    child.unref();
+    const base = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+      '-WindowStyle', 'Hidden', '-File', `"${overlayScriptPath()}"`, '-SyncPort', String(PORT)];
+    spawnDetached(base);
+    if (readOverlayConfig().navPopout) spawnDetached([...base, '-Mode', 'nav']);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end('{"ok":true}');
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'spawn_failed', detail: String(err.message || err) }));
   }
+}
+
+function handleShutdown(res) {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end('{"ok":true}');
+  setTimeout(() => process.exit(0), 150);
 }
 
 async function proxyToGame(req, res) {
@@ -205,6 +234,9 @@ const server = http.createServer((req, res) => {
       handleNavSync(req, res);
     } else if (req.url.startsWith('/sync/overlay-config')) {
       handleOverlayConfig(req, res);
+    } else if (req.url.startsWith('/sync/shutdown') && req.method === 'POST') {
+      if (!originAllowed(req)) { rejectOrigin(res); return; }
+      handleShutdown(res);
     } else if (req.url.startsWith('/sync/overlay') && req.method === 'POST') {
       if (!originAllowed(req)) { rejectOrigin(res); return; }
       handleOverlayLaunch(res);
@@ -223,6 +255,10 @@ const server = http.createServer((req, res) => {
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
+    if (sea) {
+      openBrowser();
+      process.exit(0);
+    }
     console.error(`Port ${PORT} is already in use — is another TACVIEW server running?`);
   } else {
     console.error('Server error:', err.message);
@@ -233,9 +269,6 @@ server.on('error', (err) => {
 server.listen(PORT, () => {
   console.log(`TACVIEW online → http://localhost:${PORT}`);
   console.log(`Proxying game API from ${GAME_BASE}`);
-  if (!process.env.TACVIEW_NO_OPEN) {
-    const opener = spawn('cmd.exe', ['/c', 'start', '""', `http://localhost:${PORT}`],
-      { detached: true, stdio: 'ignore', windowsVerbatimArguments: true });
-    opener.unref();
-  }
+  if (sea && !process.env.TACVIEW_NO_TRAY) startTray();
+  if (!process.env.TACVIEW_NO_OPEN) openBrowser();
 });

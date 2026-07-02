@@ -27,17 +27,26 @@ const OverlayCfg = (() => {
     }
   }
 
+  const PALETTE = ['#35c4e8', '#29ff9e', '#ffb02e', '#e8f4f0', '#ff5050', '#b48cff'];
+
   let pushTimer = null;
   function push() {
     clearTimeout(pushTimer);
     pushTimer = setTimeout(() => {
-      const { widgets, opacity, fontScale, playerName } = config;
+      const { widgets, opacity, fontScale, playerName, navColor, textColor, navPopout } = config;
       fetch(`${TacApi.syncBase}/sync/overlay-config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ widgets, opacity, fontScale, playerName }),
+        body: JSON.stringify({ widgets, opacity, fontScale, playerName, navColor, textColor, navPopout }),
       }).catch(() => {});
     }, 250);
+  }
+
+  function swatchRow(label, key) {
+    const swatches = PALETTE.map((c) =>
+      `<span class="sw ${config[key] === c ? 'sel' : ''}" data-k="${key}" data-c="${c}" style="background:${c}"></span>`
+    ).join('');
+    return `<div class="cfg-row swatches"><span class="sw-label">${label}</span>${swatches}</div>`;
   }
 
   const PRESETS = {
@@ -60,7 +69,10 @@ const OverlayCfg = (() => {
       rows +
       `<label class="cfg-row slider">OPACITY <input type="range" id="cfg-opacity" min="20" max="100" value="${config.opacity}"><span id="cfg-opacity-v">${config.opacity}%</span></label>` +
       `<label class="cfg-row slider">TEXT SIZE <input type="range" id="cfg-font" min="70" max="160" value="${config.fontScale}"><span id="cfg-font-v">${config.fontScale}%</span></label>` +
-      `<label class="cfg-row">CALLSIGN <input type="text" id="cfg-player" placeholder="filters FEED to you" value="${(config.playerName || '').replace(/"/g, '&quot;')}"></label>`;
+      `<label class="cfg-row">CALLSIGN <input type="text" id="cfg-player" placeholder="filters FEED to you" value="${(config.playerName || '').replace(/"/g, '&quot;')}"></label>` +
+      swatchRow('NAV COLOR', 'navColor') +
+      swatchRow('TEXT COLOR', 'textColor') +
+      `<label class="cfg-row"><input type="checkbox" id="cfg-popout" ${config.navPopout ? 'checked' : ''}> NAV POPOUT — separate window</label>`;
 
     panel.querySelectorAll('.cfg-preset').forEach((el) => {
       el.addEventListener('click', () => {
@@ -71,6 +83,17 @@ const OverlayCfg = (() => {
     });
     panel.querySelector('#cfg-player').addEventListener('input', (e) => {
       config = { ...config, playerName: e.target.value };
+      push();
+    });
+    panel.querySelectorAll('.sw').forEach((el) => {
+      el.addEventListener('click', () => {
+        config = { ...config, [el.dataset.k]: el.dataset.c };
+        push();
+        render();
+      });
+    });
+    panel.querySelector('#cfg-popout').addEventListener('change', (e) => {
+      config = { ...config, navPopout: e.target.checked };
       push();
     });
     panel.querySelectorAll('input[data-w]').forEach((el) => {
@@ -102,7 +125,8 @@ const OverlayCfg = (() => {
   });
 
   document.addEventListener('click', (e) => {
-    if (!panel.contains(e.target) && e.target !== btn) panel.classList.add('hidden');
+    const path = e.composedPath ? e.composedPath() : [];
+    if (!path.includes(panel) && !path.includes(btn)) panel.classList.add('hidden');
   });
 
   load();

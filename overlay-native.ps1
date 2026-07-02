@@ -1,7 +1,13 @@
+param(
+  [string]$Mode = 'full',
+  [int]$SyncPort = 3111
+)
+
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Net.Http
 
-$script:mutex = New-Object System.Threading.Mutex($false, 'TacViewOverlayMutex')
+$mutexName = if ($Mode -eq 'nav') { 'TacViewNavOverlayMutex' } else { 'TacViewOverlayMutex' }
+$script:mutex = New-Object System.Threading.Mutex($false, $mutexName)
 if (-not $script:mutex.WaitOne(0)) { exit }
 
 $xaml = @'
@@ -67,6 +73,13 @@ $navArrow = $window.FindName('NavArrow')
 $navRot = $navArrow.RenderTransform
 $script:arrowAngle = 0.0
 
+if ($Mode -eq 'nav') {
+  $window.Title = 'TacView Nav'
+  $window.Width = 330
+  $rows.title.Text = 'TACVIEW NAV'
+  foreach ($k in @('threat', 'ship', 'fuel', 'caution', 'feed')) { $rows[$k].Visibility = 'Collapsed' }
+}
+
 function Set-NavArrow($relDeg, $aligned) {
   $navArrow.Visibility = 'Visible'
   $delta = ((($relDeg - $script:arrowAngle) % 360) + 540) % 360 - 180
@@ -79,10 +92,10 @@ function Set-NavArrow($relDeg, $aligned) {
   $navRot.BeginAnimation([Windows.Media.RotateTransform]::AngleProperty, $anim)
   if ($aligned) {
     $navArrow.Fill = $colors.green
-    $navArrow.Effect.Color = [Windows.Media.Color]::FromRgb(0x29, 0xFF, 0x9E)
+    try { $navArrow.Effect.Color = [Windows.Media.Color]::FromRgb(0x29, 0xFF, 0x9E) } catch {}
   } else {
-    $navArrow.Fill = $colors.cyan
-    $navArrow.Effect.Color = [Windows.Media.Color]::FromRgb(0x35, 0xC4, 0xE8)
+    $navArrow.Fill = $script:theme.nav
+    try { $navArrow.Effect.Color = $script:theme.nav.Color } catch {}
   }
 }
 
@@ -97,6 +110,7 @@ $runspace = [runspacefactory]::CreateRunspace()
 $runspace.ApartmentState = 'MTA'
 $runspace.Open()
 $runspace.SessionStateProxy.SetVariable('shared', $shared)
+$runspace.SessionStateProxy.SetVariable('syncPort', $SyncPort)
 $poller = [powershell]::Create()
 $poller.Runspace = $runspace
 [void]$poller.AddScript({
@@ -104,7 +118,7 @@ $poller.Runspace = $runspace
   $http = New-Object System.Net.Http.HttpClient
   $http.Timeout = [TimeSpan]::FromMilliseconds(1500)
   $GAME = 'http://127.0.0.1:8111'
-  $SYNC = 'http://127.0.0.1:3111'
+  $SYNC = "http://127.0.0.1:$syncPort"
   function Get-Json($url) {
     try { ($http.GetStringAsync($url).GetAwaiter().GetResult()) | ConvertFrom-Json } catch { $null }
   }
@@ -170,6 +184,15 @@ $colors = @{
   text   = $bc.ConvertFromString('#FFDFFEF2')
 }
 
+$script:theme = @{ nav = $colors.cyan; text = $colors.green }
+
+function Parse-Brush($hex, $fallback) {
+  if ($hex) {
+    try { return $bc.ConvertFromString($hex) } catch {}
+  }
+  $fallback
+}
+
 $script:cfg = @{
   widgets = @{ nav = $true; threat = $true; ship = $true; fuel = $false; caution = $true; feed = $false }
   opacity = 75; fontScale = 100; playerName = ''
@@ -193,8 +216,12 @@ function Apply-Config($c) {
     }
     opacity = [int]$c.opacity; fontScale = [int]$c.fontScale
     playerName = [string]$c.playerName
+    navColor = [string]$c.navColor; textColor = [string]$c.textColor
+    navPopout = [bool]$c.navPopout
   }
-  $shared.feedOn = $script:cfg.widgets.feed
+  $script:theme.nav = Parse-Brush $script:cfg.navColor $colors.cyan
+  $script:theme.text = Parse-Brush $script:cfg.textColor $colors.green
+  $shared.feedOn = if ($Mode -eq 'nav') { $false } else { $script:cfg.widgets.feed }
   $alpha = [math]::Max(20, [math]::Min(100, $script:cfg.opacity))
   $hex = '{0:X2}' -f [int][math]::Round($alpha * 2.55)
   $root.Background = $bc.ConvertFromString("#$($hex)04070A")
@@ -203,17 +230,26 @@ function Apply-Config($c) {
   $rows.nav.FontSize = 16 * $s
   foreach ($k in @('threat', 'ship', 'fuel', 'caution')) { $rows[$k].FontSize = 13 * $s }
   $rows.feed.FontSize = 11 * $s
-  if ($script:cfg.widgets.nav) { $navRow.Visibility = 'Visible' } else { $navRow.Visibility = 'Collapsed' }
-  foreach ($k in @('threat', 'ship', 'fuel')) {
-    if ($script:cfg.widgets[$k]) { $rows[$k].Visibility = 'Visible' } else { $rows[$k].Visibility = 'Collapsed' }
+  if ($Mode -eq 'nav') {
+    $navRow.Visibility = 'Visible'
+  } else {
+    if ($script:cfg.widgets.nav -and -not $script:cfg.navPopout) { $navRow.Visibility = 'Visible' } else { $navRow.Visibility = 'Collapsed' }
+    foreach ($k in @('threat', 'ship', 'fuel')) {
+      if ($script:cfg.widgets[$k]) { $rows[$k].Visibility = 'Visible' } else { $rows[$k].Visibility = 'Collapsed' }
+    }
+    if (-not $script:cfg.widgets.caution) { $rows.caution.Visibility = 'Collapsed' }
+    if (-not $script:cfg.widgets.feed) { $rows.feed.Visibility = 'Collapsed' }
   }
-  if (-not $script:cfg.widgets.caution) { $rows.caution.Visibility = 'Collapsed' }
-  if (-not $script:cfg.widgets.feed) { $rows.feed.Visibility = 'Collapsed' }
 }
 
 $window.Add_MouseLeftButtonDown({
   try { $window.DragMove() } catch {}
-  Post-Json 'http://127.0.0.1:3111/sync/overlay-config' @{ left = [math]::Round($window.Left); top = [math]::Round($window.Top) }
+  $pos = if ($Mode -eq 'nav') {
+    @{ navLeft = [math]::Round($window.Left); navTop = [math]::Round($window.Top) }
+  } else {
+    @{ left = [math]::Round($window.Left); top = [math]::Round($window.Top) }
+  }
+  Post-Json "http://127.0.0.1:$SyncPort/sync/overlay-config" $pos
 })
 $window.Add_KeyDown({ if ($_.Key -eq 'Escape') { $window.Close() } })
 $btnClose.Add_Click({ $window.Close() })
@@ -221,9 +257,14 @@ $btnClose.Add_Click({ $window.Close() })
 $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(400)
 $timer.Add_Tick({
+  try {
   $script:tickCount++
   Apply-Config $shared.cfg
-  $w = $script:cfg.widgets
+  $w = if ($Mode -eq 'nav') {
+    @{ nav = $true; threat = $false; ship = $false; fuel = $false; caution = $false; feed = $false }
+  } else {
+    $script:cfg.widgets
+  }
 
   $ind = $shared.ind
   $st = $shared.st
@@ -255,7 +296,7 @@ $timer.Add_Tick({
             $arrowSet = $true
           }
           $rows.nav.Text = "NAV  $($a.label) $(Pad3 $a.bearing) $(Fmt-Range $a.range)$rel"
-          $rows.nav.Foreground = $colors.cyan
+          $rows.nav.Foreground = $script:theme.nav
         }
       } else {
         $rows.nav.Text = 'NAV  NO WAYPOINT'
@@ -320,7 +361,7 @@ $timer.Add_Tick({
         $altTxt = if ($null -ne $alt) { [math]::Round($alt) } else { '--' }
         $rows.ship.Text = "IAS  $iasTxt  ALT $altTxt  HDG $hdgTxt"
       }
-      $rows.ship.Foreground = $colors.green
+      $rows.ship.Foreground = $script:theme.text
     } else {
       $rows.ship.Text = 'SHIP NO VEHICLE FEED'
       $rows.ship.Foreground = $colors.dim
@@ -349,7 +390,7 @@ $timer.Add_Tick({
         }
       }
       $rows.fuel.Text = 'FUEL {0} {1:N0}%{2}' -f [math]::Round($fuel), $fuelPct, $endTxt
-      $rows.fuel.Foreground = if ($fuelPct -lt 8) { $colors.red } elseif ($fuelPct -lt 20) { $colors.amber } else { $colors.green }
+      $rows.fuel.Foreground = if ($fuelPct -lt 8) { $colors.red } elseif ($fuelPct -lt 20) { $colors.amber } else { $script:theme.text }
     }
   } elseif ($w.fuel) {
     $rows.fuel.Text = 'FUEL --'
@@ -438,16 +479,22 @@ $timer.Add_Tick({
       $rows.feed.Visibility = 'Collapsed'
     }
   }
+  } catch {}
 })
 
 try {
   $bootHttp = New-Object System.Net.Http.HttpClient
   $bootHttp.Timeout = [TimeSpan]::FromMilliseconds(700)
-  $bootJson = $bootHttp.GetStringAsync('http://127.0.0.1:3111/sync/overlay-config').GetAwaiter().GetResult()
+  $bootJson = $bootHttp.GetStringAsync("http://127.0.0.1:$SyncPort/sync/overlay-config").GetAwaiter().GetResult()
   $boot = $bootJson | ConvertFrom-Json
   if ($boot) {
-    if ($null -ne $boot.left) { $window.Left = $boot.left }
-    if ($null -ne $boot.top) { $window.Top = $boot.top }
+    if ($Mode -eq 'nav') {
+      if ($null -ne $boot.navLeft) { $window.Left = $boot.navLeft }
+      if ($null -ne $boot.navTop) { $window.Top = $boot.navTop }
+    } else {
+      if ($null -ne $boot.left) { $window.Left = $boot.left }
+      if ($null -ne $boot.top) { $window.Top = $boot.top }
+    }
     Apply-Config $boot
   }
   $bootHttp.Dispose()
