@@ -12,11 +12,30 @@ const Waypoints = (() => {
   let activeId = null;
   let notice = null;
 
-  function add(fx, fy, kind = 'wp') {
-    const label = kind === 'poi' ? `POI${poiSeq++}` : `WP${wpSeq++}`;
-    const wp = { id: uid++, kind, label, x: fx, y: fy };
+  function add(fx, fy, kind = 'wp', label = null) {
+    if (label) {
+      const existing = list.find((w) => w.label === label);
+      if (existing) { activeId = existing.id; renderPanel(); return; }
+    }
+    const finalLabel = label || (kind === 'poi' ? `POI${poiSeq++}` : `WP${wpSeq++}`);
+    const wp = { id: uid++, kind, label: finalLabel, x: fx, y: fy };
     list = [...list, wp];
     if (activeId === null) activeId = wp.id;
+    renderPanel();
+  }
+
+  function rename(id, label) {
+    const clean = String(label || '').trim().slice(0, 12);
+    if (!clean) return;
+    list = list.map((w) => (w.id === id ? { ...w, label: clean } : w));
+    renderPanel();
+  }
+
+  function cycle() {
+    if (list.length < 2) return;
+    const idx = list.findIndex((w) => w.id === activeId);
+    const next = list[(idx + 1) % list.length];
+    activeId = next.id;
     renderPanel();
   }
 
@@ -49,6 +68,12 @@ const Waypoints = (() => {
     return ARRIVE_RADIUS_M.air;
   }
 
+  function speedMs() {
+    const ind = TacApi.state.indicators;
+    if (ind && typeof ind.speed === 'number') return Math.abs(ind.speed);
+    return null;
+  }
+
   function statusOf(wp) {
     const info = TacApi.state.mapInfo;
     const player = TacApi.state.mapObjects.find((o) => o.icon === 'Player');
@@ -56,9 +81,12 @@ const Waypoints = (() => {
     const world = info.map_max[0] - info.map_min[0];
     const dxm = (wp.x - player.x) * world;
     const dym = (wp.y - player.y) * world;
+    const range = Math.hypot(dxm, dym);
+    const spd = speedMs();
     return {
-      range: Math.hypot(dxm, dym),
+      range,
       bearing: (Math.atan2(dxm, -dym) * 180 / Math.PI + 360) % 360,
+      eta: spd && spd > 5 ? Math.round(range / spd) : null,
     };
   }
 
@@ -73,6 +101,7 @@ const Waypoints = (() => {
       kind: wp.kind,
       range: s.range,
       bearing: s.bearing,
+      eta: s.eta,
       arrived: s.range < arriveRadius(),
     };
   }
@@ -101,11 +130,19 @@ const Waypoints = (() => {
     return m >= 1000 ? `${(m / 1000).toFixed(1)}KM` : `${Math.round(m)}M`;
   }
 
+  function fmtEta(sec) {
+    if (sec === null || sec === undefined) return '';
+    if (sec < 60) return ` · ${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return ` · ${m}:${String(s).padStart(2, '0')}`;
+  }
+
   function navTextFor(wp) {
     const s = statusOf(wp);
     if (!s) return 'NO OWNSHIP';
     if (wp.kind === 'poi' && s.range < arriveRadius()) return 'AT POI';
-    return `${String(Math.round(s.bearing)).padStart(3, '0')}° · ${fmtRange(s.range)}`;
+    return `${String(Math.round(s.bearing)).padStart(3, '0')}° · ${fmtRange(s.range)}${fmtEta(s.eta)}`;
   }
 
   function renderPanel() {
@@ -155,11 +192,36 @@ const Waypoints = (() => {
 
   elList.addEventListener('click', (e) => {
     if (e.target.getAttribute('data-del') !== null) return;
+    if (e.target.classList.contains('wi-edit')) return;
     const row = e.target.closest('.wp-row');
     if (row) { activeId = Number(row.dataset.id); renderPanel(); }
   });
+
+  elList.addEventListener('dblclick', (e) => {
+    const label = e.target.closest('.wi');
+    if (!label) return;
+    const row = e.target.closest('.wp-row');
+    if (!row) return;
+    const id = Number(row.dataset.id);
+    const wp = list.find((w) => w.id === id);
+    if (!wp) return;
+    const input = document.createElement('input');
+    input.className = 'wi-edit';
+    input.value = wp.label;
+    input.maxLength = 12;
+    label.replaceWith(input);
+    input.focus();
+    input.select();
+    const commit = () => rename(id, input.value);
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+      else if (ev.key === 'Escape') { renderPanel(); }
+    });
+    input.addEventListener('blur', commit);
+  });
+
   document.getElementById('wp-clear').addEventListener('click', clear);
 
   renderPanel();
-  return { add, remove, clear, getAll, isActive, activeStatus, getNotice, tick };
+  return { add, remove, rename, cycle, clear, getAll, isActive, activeStatus, getNotice, tick };
 })();

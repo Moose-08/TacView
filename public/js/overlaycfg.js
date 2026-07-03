@@ -29,15 +29,19 @@ const OverlayCfg = (() => {
 
   const PALETTE = ['#35c4e8', '#29ff9e', '#ffb02e', '#e8f4f0', '#ff5050', '#b48cff'];
 
+  const HOTKEY_RE = /^(Ctrl\+)?(Alt\+)?(Shift\+)?([A-Z0-9]|F([1-9]|1[0-2]))$/;
+
   let pushTimer = null;
   function push() {
     clearTimeout(pushTimer);
     pushTimer = setTimeout(() => {
-      const { widgets, opacity, fontScale, playerName, navColor, textColor, navPopout } = config;
+      const { widgets, opacity, fontScale, playerName, navColor, textColor,
+        navPopout, clickThrough, hotkeyToggle, hotkeyCycle } = config;
       fetch(`${TacApi.syncBase}/sync/overlay-config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ widgets, opacity, fontScale, playerName, navColor, textColor, navPopout }),
+        body: JSON.stringify({ widgets, opacity, fontScale, playerName, navColor, textColor,
+          navPopout, clickThrough, hotkeyToggle, hotkeyCycle }),
       }).catch(() => {});
     }, 250);
   }
@@ -72,7 +76,11 @@ const OverlayCfg = (() => {
       `<label class="cfg-row">CALLSIGN <input type="text" id="cfg-player" placeholder="filters FEED to you" value="${(config.playerName || '').replace(/"/g, '&quot;')}"></label>` +
       swatchRow('NAV COLOR', 'navColor') +
       swatchRow('TEXT COLOR', 'textColor') +
-      `<label class="cfg-row"><input type="checkbox" id="cfg-popout" ${config.navPopout ? 'checked' : ''}> NAV POPOUT — separate window</label>`;
+      `<label class="cfg-row"><input type="checkbox" id="cfg-popout" ${config.navPopout ? 'checked' : ''}> NAV POPOUT — separate window</label>` +
+      `<label class="cfg-row" title="Mouse clicks pass straight through the overlay. Turn off to drag it again."><input type="checkbox" id="cfg-clickthrough" ${config.clickThrough ? 'checked' : ''}> CLICK-THROUGH — overlay ignores the mouse</label>` +
+      `<label class="cfg-row hotkey">SHOW/HIDE KEY <input type="text" id="cfg-hk-toggle" placeholder="Ctrl+Alt+T" value="${(config.hotkeyToggle || '').replace(/"/g, '&quot;')}"></label>` +
+      `<label class="cfg-row hotkey">CYCLE NAV KEY <input type="text" id="cfg-hk-cycle" placeholder="Ctrl+Alt+N" value="${(config.hotkeyCycle || '').replace(/"/g, '&quot;')}"></label>` +
+      '<div class="cfg-hint">Hotkeys work in-game. Format: Ctrl+Alt+T, Shift+F6, A-Z / 0-9 / F1-F12.</div>';
 
     panel.querySelectorAll('.cfg-preset').forEach((el) => {
       el.addEventListener('click', () => {
@@ -95,6 +103,21 @@ const OverlayCfg = (() => {
     panel.querySelector('#cfg-popout').addEventListener('change', (e) => {
       config = { ...config, navPopout: e.target.checked };
       push();
+    });
+    panel.querySelector('#cfg-clickthrough').addEventListener('change', (e) => {
+      config = { ...config, clickThrough: e.target.checked };
+      push();
+    });
+    [['#cfg-hk-toggle', 'hotkeyToggle'], ['#cfg-hk-cycle', 'hotkeyCycle']].forEach(([sel, key]) => {
+      const input = panel.querySelector(sel);
+      input.addEventListener('input', (e) => {
+        const value = e.target.value.trim();
+        const ok = value === '' || HOTKEY_RE.test(value);
+        e.target.classList.toggle('bad', !ok);
+        if (!ok) return;
+        config = { ...config, [key]: value };
+        push();
+      });
     });
     panel.querySelectorAll('input[data-w]').forEach((el) => {
       el.addEventListener('change', () => {
@@ -130,5 +153,5 @@ const OverlayCfg = (() => {
   });
 
   load();
-  return { load };
+  return { load, getConfig: () => config };
 })();

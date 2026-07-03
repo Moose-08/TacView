@@ -346,6 +346,87 @@ html, body {
 }
 .cfg-preset:hover { color: var(--green); border-color: var(--green-dim); }
 
+.cfg-row.hotkey { color: var(--text-dim); font-size: 10px; }
+.cfg-row.hotkey input[type="text"] { flex: 0 0 120px; text-align: center; }
+.cfg-row input.bad { border-color: var(--red); color: var(--red); }
+.cfg-hint {
+  font-size: 9.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.wp-row .wi-edit {
+  background: var(--bg-panel);
+  border: 1px solid var(--cyan);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  width: 100%;
+  padding: 1px 3px;
+}
+
+.grid-chip {
+  color: var(--amber);
+  border-bottom: 1px dotted var(--amber);
+  cursor: pointer;
+}
+.grid-chip:hover { background: rgba(255, 176, 46, 0.15); }
+
+.tab .beta {
+  font-size: 8px;
+  color: var(--amber);
+  vertical-align: super;
+  margin-left: 1px;
+}
+
+#tab-debrief { padding: 4px 2px; gap: 8px; }
+.db-beta {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  border-left: 2px solid var(--amber);
+  background: rgba(255, 176, 46, 0.06);
+  padding: 6px 8px;
+}
+.db-cs-note { font-size: 11px; color: var(--text-dim); }
+.db-cs-note b { color: var(--cyan); }
+.db-cs { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-dim); }
+.db-cs input {
+  flex: 1;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 6px;
+}
+.db-grid { display: flex; gap: 8px; }
+.db-card {
+  flex: 1;
+  text-align: center;
+  padding: 10px 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+}
+.db-card-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 2px;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.db-kd { font-family: var(--font-mono); font-size: 24px; }
+.db-k { color: var(--green); }
+.db-sep { color: var(--text-dim); margin: 0 4px; }
+.db-d { color: var(--red); }
+.db-ratio { font-size: 11px; color: var(--text); margin-top: 3px; }
+.db-sub { font-size: 9px; color: var(--text-dim); margin-top: 4px; letter-spacing: 1px; }
+.db-hint { font-size: 10px; color: var(--amber); text-align: center; }
+
 #map-section {
   background: #01050a;
   border: 1px solid var(--line);
@@ -412,6 +493,19 @@ html, body {
   cursor: pointer;
 }
 .tab.active { color: var(--green); border-color: var(--green-dim); background: rgba(41,255,158,0.05); }
+.tab-side {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 1px;
+  font-size: 11px;
+  padding: 6px 10px;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.tab-side.active { color: var(--cyan); border-color: var(--cyan); background: rgba(53,196,232,0.08); }
 
 #panel-right { display: flex; flex-direction: column; }
 .tab-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
@@ -436,6 +530,7 @@ html, body {
 .feed-line.sys { color: var(--text-dim); }
 .feed-line .actor { color: #e0f4ec; }
 .feed-line .vehicle { color: var(--text-dim); }
+.feed-line .tr-txt { color: var(--cyan); opacity: 0.85; font-size: 11px; margin-top: 1px; }
 
 #statusbar {
   height: 28px;

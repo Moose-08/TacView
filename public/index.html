@@ -62,7 +62,7 @@
 
     <section id="map-section" class="corners">
       <div id="map-toolbar">
-        <span class="tool-hint">SCROLL: ZOOM &nbsp;·&nbsp; DRAG: PAN &nbsp;·&nbsp; DBL-CLICK: RESET</span>
+        <span class="tool-hint">SCROLL: ZOOM &nbsp;·&nbsp; DRAG: PAN &nbsp;·&nbsp; ALT+DRAG: MEASURE &nbsp;·&nbsp; DBL-CLICK: RESET</span>
         <label class="toggle"><input type="checkbox" id="opt-grid" checked><span>GRID</span></label>
         <label class="toggle"><input type="checkbox" id="opt-labels" checked><span>LABELS</span></label>
         <label class="toggle"><input type="checkbox" id="opt-trail" checked><span>TRAIL</span></label>
@@ -83,9 +83,12 @@
       <div class="tabs">
         <button class="tab active" data-tab="log">BATTLE LOG</button>
         <button class="tab" data-tab="chat">COMMS</button>
+        <button class="tab" data-tab="debrief">DEBRIEF<span class="beta">β</span></button>
+        <button id="btn-translate" class="tab-side hidden" title="Translate chat to English (sends chat text to Google Translate)">EN</button>
       </div>
       <div id="tab-log" class="tab-body feed"></div>
       <div id="tab-chat" class="tab-body feed hidden"></div>
+      <div id="tab-debrief" class="tab-body hidden"></div>
     </aside>
   </main>
 
@@ -93,7 +96,7 @@
     <span id="sb-map">MAP: —</span>
     <span id="sb-objects">CONTACTS: 0</span>
     <span id="sb-gen">GEN: —</span>
-    <span class="sb-right">TACVIEW v0.2 // LOCAL DATA LINK ONLY</span>
+    <span class="sb-right">TACVIEW v0.3 // LOCAL DATA LINK ONLY</span>
   </footer>
 
   <script src="js/api.js"></script>
@@ -102,6 +105,7 @@
   <script src="js/waypoints.js"></script>
   <script src="js/telemetry.js"></script>
   <script src="js/feed.js"></script>
+  <script src="js/debrief.js"></script>
   <script src="js/overlay.js"></script>
   <script src="js/overlaycfg.js"></script>
   <script src="js/main.js"></script>

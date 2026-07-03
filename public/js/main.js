@@ -32,6 +32,7 @@
     TacMap.onMapChanged(TacApi.mapImageUrl());
     Feed.clearAll();
     Waypoints.clear();
+    Debrief.reset();
   });
 
   let lastNavPush = 0;
@@ -67,12 +68,25 @@
   });
 
   TacApi.on('battleLog', Feed.addBattleLog);
+  TacApi.on('battleLog', Debrief.ingest);
   TacApi.on('chat', Feed.addChat);
 
   setInterval(() => {
     const now = new Date();
     elClock.textContent = now.toISOString().slice(11, 19);
   }, 1000);
+
+  let lastCycle = null;
+  setInterval(() => {
+    fetch(`${TacApi.syncBase}/sync/overlay-ui`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((ui) => {
+        if (!ui) return;
+        if (lastCycle !== null && ui.cycle > lastCycle) Waypoints.cycle();
+        lastCycle = ui.cycle;
+      })
+      .catch(() => {});
+  }, 500);
 
   TacMap.start();
   TacApi.start();

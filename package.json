@@ -1,6 +1,6 @@
 {
   "name": "tacview",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Cyber-military tactical map webapp for War Thunder's localhost:8111 API",
   "main": "server.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "stop": "powershell -NoProfile -Command \"Stop-Process -Id (Get-NetTCPConnection -LocalPort 3111 -State Listen).OwningProcess -Force\"",
     "build:ext": "node scripts/build-ext.mjs",
     "build:exe": "node scripts/build-exe.mjs",
-    "overlay": "powershell -NoProfile -ExecutionPolicy Bypass -File overlay-native.ps1"
+    "overlay": "powershell -NoProfile -ExecutionPolicy Bypass -File overlay.ps1"
   },
   "engines": {
     "node": ">=18"

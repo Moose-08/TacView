@@ -5,6 +5,16 @@ param(
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Net.Http
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class TacWin32 {
+  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+  [DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+  [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+  [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+}
+"@
 
 $mutexName = if ($Mode -eq 'nav') { 'TacViewNavOverlayMutex' } else { 'TacViewOverlayMutex' }
 $script:mutex = New-Object System.Threading.Mutex($false, $mutexName)
@@ -101,7 +111,7 @@ function Set-NavArrow($relDeg, $aligned) {
 
 $shared = [hashtable]::Synchronized(@{
   stop = $false
-  ind = $null; st = $null; objs = $null; info = $null; nav = $null; cfg = $null
+  ind = $null; st = $null; objs = $null; info = $null; nav = $null; cfg = $null; ui = $null
   feedOn = $false
   hudNew = @()
 })
@@ -133,6 +143,7 @@ $poller.Runspace = $runspace
       $shared.info = Get-Json "$GAME/map_info.json"
     }
     $shared.nav = Get-Json "$SYNC/sync/nav"
+    $shared.ui = Get-Json "$SYNC/sync/overlay-ui"
     if ($i % 4 -eq 0 -or $null -eq $shared.cfg) {
       $cfg = Get-Json "$SYNC/sync/overlay-config"
       if ($cfg) { $shared.cfg = $cfg }
@@ -193,9 +204,43 @@ function Parse-Brush($hex, $fallback) {
   $fallback
 }
 
+function Parse-Hotkey($str) {
+  if ([string]::IsNullOrWhiteSpace($str)) { return $null }
+  $mod = 0; $vk = 0
+  foreach ($p in $str.Split('+')) {
+    $t = $p.Trim()
+    switch ($t.ToLower()) {
+      'ctrl'    { $mod = $mod -bor 0x2 }
+      'control' { $mod = $mod -bor 0x2 }
+      'alt'     { $mod = $mod -bor 0x1 }
+      'shift'   { $mod = $mod -bor 0x4 }
+      'win'     { $mod = $mod -bor 0x8 }
+      default {
+        $u = $t.ToUpper()
+        if ($u -match '^F([1-9]|1[0-2])$') { $vk = 0x6F + [int]$u.Substring(1) }
+        elseif ($u.Length -eq 1) {
+          $c = [int][char]$u
+          if (($c -ge 65 -and $c -le 90) -or ($c -ge 48 -and $c -le 57)) { $vk = $c }
+        }
+      }
+    }
+  }
+  if ($vk -eq 0) { return $null }
+  return @{ mod = ($mod -bor 0x4000); vk = $vk }
+}
+
+function Set-ClickThrough($on) {
+  if ($script:hwnd -eq [IntPtr]::Zero) { return }
+  if ($script:clickThroughApplied -eq $on) { return }
+  $ex = [TacWin32]::GetWindowLong($script:hwnd, -20)
+  if ($on) { $ex = $ex -bor 0x20 -bor 0x80000 } else { $ex = $ex -band (-bnot 0x20) }
+  [void][TacWin32]::SetWindowLong($script:hwnd, -20, $ex)
+  $script:clickThroughApplied = $on
+}
+
 $script:cfg = @{
   widgets = @{ nav = $true; threat = $true; ship = $true; fuel = $false; caution = $true; feed = $false }
-  opacity = 75; fontScale = 100; playerName = ''
+  opacity = 75; fontScale = 100; playerName = ''; clickThrough = $false
 }
 $script:cfgStamp = ''
 $script:tickCount = 0
@@ -203,6 +248,16 @@ $script:fuelHist = New-Object System.Collections.Generic.Queue[object]
 $script:feedMsg = ''
 $script:feedBrush = $colors.dim
 $script:feedAt = [DateTime]::MinValue
+
+$script:hwnd = [IntPtr]::Zero
+$script:hkHook = $null
+$script:hkToggle = $null
+$script:hkCycle = $null
+$script:hkToggleOwned = $false
+$script:hkCycleOwned = $false
+$script:hkStamp = '__init__'
+$script:clickThroughApplied = $null
+$script:hiddenApplied = $false
 
 function Apply-Config($c) {
   if ($null -eq $c) { return }
@@ -218,9 +273,22 @@ function Apply-Config($c) {
     playerName = [string]$c.playerName
     navColor = [string]$c.navColor; textColor = [string]$c.textColor
     navPopout = [bool]$c.navPopout
+    clickThrough = [bool]$c.clickThrough
   }
   $script:theme.nav = Parse-Brush $script:cfg.navColor $colors.cyan
   $script:theme.text = Parse-Brush $script:cfg.textColor $colors.green
+
+  $hkStr = "$($c.hotkeyToggle)|$($c.hotkeyCycle)"
+  if ($hkStr -ne $script:hkStamp) {
+    $script:hkStamp = $hkStr
+    if ($script:hwnd -ne [IntPtr]::Zero) {
+      if ($script:hkToggleOwned) { [void][TacWin32]::UnregisterHotKey($script:hwnd, 1); $script:hkToggleOwned = $false }
+      if ($script:hkCycleOwned) { [void][TacWin32]::UnregisterHotKey($script:hwnd, 2); $script:hkCycleOwned = $false }
+    }
+    $script:hkToggle = Parse-Hotkey $c.hotkeyToggle
+    $script:hkCycle = Parse-Hotkey $c.hotkeyCycle
+  }
+
   $shared.feedOn = if ($Mode -eq 'nav') { $false } else { $script:cfg.widgets.feed }
   $alpha = [math]::Max(20, [math]::Min(100, $script:cfg.opacity))
   $hex = '{0:X2}' -f [int][math]::Round($alpha * 2.55)
@@ -254,12 +322,50 @@ $window.Add_MouseLeftButtonDown({
 $window.Add_KeyDown({ if ($_.Key -eq 'Escape') { $window.Close() } })
 $btnClose.Add_Click({ $window.Close() })
 
+$window.Add_SourceInitialized({
+  try {
+    $helper = New-Object System.Windows.Interop.WindowInteropHelper($window)
+    $script:hwnd = $helper.Handle
+    $src = [System.Windows.Interop.HwndSource]::FromHwnd($script:hwnd)
+    $script:hkHook = [System.Windows.Interop.HwndSourceHook] {
+      param($h, $msg, $wParam, $lParam, $handled)
+      try {
+        if ($msg -eq 0x0312) {
+          $id = $wParam.ToInt32()
+          if ($id -eq 1) { Post-Json "http://127.0.0.1:$SyncPort/sync/overlay-ui" @{ toggle = $true } }
+          elseif ($id -eq 2) { Post-Json "http://127.0.0.1:$SyncPort/sync/overlay-ui" @{ cycle = $true } }
+        }
+      } catch {}
+      return [IntPtr]::Zero
+    }
+    $src.AddHook($script:hkHook)
+  } catch {}
+})
+
 $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(400)
 $timer.Add_Tick({
   try {
   $script:tickCount++
   Apply-Config $shared.cfg
+
+  $ui = $shared.ui
+  $wantHidden = ($ui -and $ui.visible -eq $false)
+  if ($wantHidden -ne $script:hiddenApplied) {
+    $window.Opacity = if ($wantHidden) { 0.0 } else { 1.0 }
+    $script:hiddenApplied = $wantHidden
+  }
+
+  if ($script:hwnd -ne [IntPtr]::Zero) {
+    if ($script:hkToggle -and -not $script:hkToggleOwned) {
+      $script:hkToggleOwned = [TacWin32]::RegisterHotKey($script:hwnd, 1, [uint32]$script:hkToggle.mod, [uint32]$script:hkToggle.vk)
+    }
+    if ($script:hkCycle -and -not $script:hkCycleOwned) {
+      $script:hkCycleOwned = [TacWin32]::RegisterHotKey($script:hwnd, 2, [uint32]$script:hkCycle.mod, [uint32]$script:hkCycle.vk)
+    }
+    Set-ClickThrough ($script:cfg.clickThrough -or $wantHidden)
+  }
+
   $w = if ($Mode -eq 'nav') {
     @{ nav = $true; threat = $false; ship = $false; fuel = $false; caution = $false; feed = $false }
   } else {
@@ -451,9 +557,9 @@ $timer.Add_Tick({
       $shared.hudNew = @()
       $name = $script:cfg.playerName
       foreach ($e in $incoming) {
-        if ($e.msg -match 'NET_PLAYER_') { continue }
-        if ($name -and $e.msg.IndexOf($name, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
-        $msg = $e.msg
+        $msg = ($e.msg -replace '</?color[^>]*>', '').Trim()
+        if ($msg -match 'NET_PLAYER_' -or $msg.Length -eq 0) { continue }
+        if ($name -and $msg.IndexOf($name, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
         if ($msg.Length -gt 56) { $msg = $msg.Substring(0, 55) + '~' }
         $script:feedMsg = $msg
         $script:feedAt = [DateTime]::UtcNow
@@ -506,6 +612,10 @@ try {
 } finally {
   $timer.Stop()
   $shared.stop = $true
+  if ($script:hwnd -ne [IntPtr]::Zero) {
+    if ($script:hkToggleOwned) { try { [void][TacWin32]::UnregisterHotKey($script:hwnd, 1) } catch {} }
+    if ($script:hkCycleOwned) { try { [void][TacWin32]::UnregisterHotKey($script:hwnd, 2) } catch {} }
+  }
   Start-Sleep -Milliseconds 300
   try { $poller.Stop() } catch {}
   $poller.Dispose()

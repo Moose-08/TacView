@@ -2,5 +2,6 @@ node_modules/
 build/
 extension/app/
 overlay-config.json
+overlay-native.ps1
 .claude/
 .playwright-mcp/

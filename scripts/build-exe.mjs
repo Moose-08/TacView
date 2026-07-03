@@ -38,7 +38,7 @@ for (const name of ['TACVIEW.exe', 'sea-prep.blob', 'sea-config.json']) {
 }
 
 const assets = {
-  'overlay-native.ps1': path.join(root, 'overlay-native.ps1'),
+  'overlay.ps1': path.join(root, 'overlay.ps1'),
   'assets/tray.ps1': path.join(root, 'assets', 'tray.ps1'),
 };
 for (const rel of listFiles(path.join(root, 'public'))) {

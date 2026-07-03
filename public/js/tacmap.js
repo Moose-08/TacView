@@ -15,6 +15,8 @@ const TacMap = (() => {
   let mouse = { x: 0, y: 0, inside: false };
   let dragging = false;
   let dragStart = null;
+  let ruler = null;
+  let rulerDrag = false;
 
   const HOSTILE = '#ff3b3b';
   const FRIENDLY = '#35c4e8';
@@ -59,12 +61,24 @@ const TacMap = (() => {
   }, { passive: false });
 
   canvas.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (e.altKey) {
+      const f = toMapFraction(e.offsetX, e.offsetY);
+      ruler = { a: f, b: f };
+      rulerDrag = true;
+      return;
+    }
+    ruler = null;
     dragging = true;
     dragStart = { x: e.offsetX - view.panX, y: e.offsetY - view.panY };
   });
-  window.addEventListener('mouseup', () => { dragging = false; });
+  window.addEventListener('mouseup', () => { dragging = false; rulerDrag = false; });
   canvas.addEventListener('mousemove', (e) => {
     mouse = { x: e.offsetX, y: e.offsetY, inside: true };
+    if (rulerDrag && ruler) {
+      ruler.b = toMapFraction(e.offsetX, e.offsetY);
+      return;
+    }
     if (dragging && dragStart) {
       options.follow = false;
       const followBox = document.getElementById('opt-follow');
@@ -75,6 +89,7 @@ const TacMap = (() => {
   });
   canvas.addEventListener('mouseleave', () => { mouse.inside = false; });
   canvas.addEventListener('dblclick', resetView);
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') ruler = null; });
 
   canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -149,6 +164,18 @@ const TacMap = (() => {
     const row = Math.floor((fy - g.startFy) / g.stepFy);
     if (col < 0 || row < 0 || col >= g.cols || row >= g.rows) return 'OFF-GRID';
     return String.fromCharCode(65 + col) + (row + 1);
+  }
+
+  function gridRefToFraction(letter, num) {
+    const g = gridFractions();
+    if (!g) return null;
+    const col = letter.toUpperCase().charCodeAt(0) - 65;
+    const row = num - 1;
+    if (col < 0 || col >= g.cols || row < 0 || row >= g.rows) return null;
+    return {
+      x: g.startFx + (col + 0.5) * g.stepFx,
+      y: g.startFy + (row + 0.5) * g.stepFy,
+    };
   }
 
   function isPlayer(o) { return o.icon === 'Player'; }
@@ -348,6 +375,39 @@ const TacMap = (() => {
     }
   }
 
+  function drawRuler() {
+    if (!ruler || !mapInfo) return;
+    const a = toScreen(ruler.a.x, ruler.a.y);
+    const b = toScreen(ruler.b.x, ruler.b.y);
+    const world = mapInfo.map_max[0] - mapInfo.map_min[0];
+    const dxm = (ruler.b.x - ruler.a.x) * world;
+    const dym = (ruler.b.y - ruler.a.y) * world;
+    const range = Math.hypot(dxm, dym);
+    const bearing = (Math.atan2(dxm, -dym) * 180 / Math.PI + 360) % 360;
+    const label = `${range >= 1000 ? `${(range / 1000).toFixed(2)} KM` : `${Math.round(range)} M`}  ·  ${String(Math.round(bearing)).padStart(3, '0')}°`;
+
+    ctx.save();
+    ctx.strokeStyle = '#ffb02e';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
+    for (const p of [a, b]) {
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fillStyle = '#ffb02e'; ctx.fill();
+    }
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    ctx.font = '11px "Share Tech Mono", monospace';
+    const w = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(4, 7, 10, 0.85)';
+    ctx.fillRect(mx - w / 2 - 5, my - 20, w + 10, 16);
+    ctx.fillStyle = '#ffb02e';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, mx, my - 8);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
   function updateReadout() {
     if (!mouse.inside) {
       const player = objects.find(isPlayer);
@@ -426,6 +486,7 @@ const TacMap = (() => {
     if (options.grid) drawGrid();
     if (options.trail) drawTrail();
     drawWaypoints();
+    drawRuler();
 
     objects.filter((o) => o.type !== 'aircraft' && o.type !== 'ground_model').forEach(drawObject);
     objects.filter((o) => o.type === 'ground_model').forEach(drawObject);
@@ -481,5 +542,5 @@ const TacMap = (() => {
     requestAnimationFrame(render);
   }
 
-  return { start, setObjects, setMapInfo, loadMapImage, onMapChanged, sectorName, hasMapImage };
+  return { start, setObjects, setMapInfo, loadMapImage, onMapChanged, sectorName, gridRefToFraction, hasMapImage };
 })();

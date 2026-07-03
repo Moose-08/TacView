@@ -37,6 +37,9 @@ const DEFAULT_OVERLAY_CONFIG = {
   navColor: '#35c4e8',
   textColor: '#29ff9e',
   navPopout: false,
+  clickThrough: false,
+  hotkeyToggle: 'Ctrl+Alt+T',
+  hotkeyCycle: 'Ctrl+Alt+N',
   left: 80,
   top: 80,
   navLeft: 80,
@@ -94,6 +97,86 @@ function handleOverlayConfig(req, res) {
   res.end(JSON.stringify(readOverlayConfig()));
 }
 
+const TRANSLATE_BASE = 'https://translate.googleapis.com/translate_a/single';
+const translateCache = new Map();
+const translateInflight = new Map();
+
+async function fetchTranslation(text) {
+  const url = `${TRANSLATE_BASE}?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+  const upstream = await fetch(url, { signal: AbortSignal.timeout(6000) });
+  if (!upstream.ok) throw new Error(`status ${upstream.status}`);
+  const data = await upstream.json();
+  const translated = Array.isArray(data[0]) ? data[0].map((seg) => seg[0]).join('') : '';
+  return JSON.stringify({ text: translated, lang: data[2] || '' });
+}
+
+function handleTranslate(req, res) {
+  if (req.method !== 'POST') {
+    res.writeHead(405, { 'Content-Type': 'application/json' });
+    res.end('{"error":"post_only"}');
+    return;
+  }
+  if (!originAllowed(req)) { rejectOrigin(res); return; }
+  readBody(req, async (body) => {
+    try {
+      let text = '';
+      try {
+        text = String(JSON.parse(body || '{}').q || '').slice(0, 500).trim();
+      } catch (_) {}
+      if (!text) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end('{"error":"missing_q"}');
+        return;
+      }
+      if (translateCache.has(text)) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(translateCache.get(text));
+        return;
+      }
+      let job = translateInflight.get(text);
+      if (!job) {
+        job = fetchTranslation(text);
+        translateInflight.set(text, job);
+        job.then((payload) => {
+          if (translateCache.size >= 500) translateCache.delete(translateCache.keys().next().value);
+          translateCache.set(text, payload);
+        }).catch(() => {}).then(() => translateInflight.delete(text));
+      }
+      const payload = await job;
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(payload);
+    } catch (err) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'translate_unreachable', detail: String(err.message || err) }));
+    }
+  });
+}
+
+let overlayUi = { visible: true, cycle: 0 };
+
+function handleOverlayUi(req, res) {
+  if (req.method === 'POST') {
+    if (!originAllowed(req)) { rejectOrigin(res); return; }
+    readBody(req, (body) => {
+      try {
+        const parsed = JSON.parse(body || '{}');
+        overlayUi = {
+          visible: parsed.toggle === true ? !overlayUi.visible : overlayUi.visible,
+          cycle: parsed.cycle === true ? overlayUi.cycle + 1 : overlayUi.cycle,
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(overlayUi));
+      } catch (_) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end('{"error":"bad_json"}');
+      }
+    });
+    return;
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(overlayUi));
+}
+
 let navState = { active: null, notice: null, updated: 0 };
 
 function handleNavSync(req, res) {
@@ -126,8 +209,8 @@ function extractAsset(assetKey, filename) {
 }
 
 function overlayScriptPath() {
-  if (!sea) return path.join(__dirname, 'overlay-native.ps1');
-  return extractAsset('overlay-native.ps1', 'tacview-overlay.ps1');
+  if (!sea) return path.join(__dirname, 'overlay.ps1');
+  return extractAsset('overlay.ps1', 'tacview-overlay.ps1');
 }
 
 function spawnDetached(args) {
@@ -230,7 +313,11 @@ const server = http.createServer((req, res) => {
       res.end();
       return;
     }
-    if (req.url.startsWith('/sync/nav')) {
+    if (req.url.startsWith('/sync/translate')) {
+      handleTranslate(req, res);
+    } else if (req.url.startsWith('/sync/overlay-ui')) {
+      handleOverlayUi(req, res);
+    } else if (req.url.startsWith('/sync/nav')) {
       handleNavSync(req, res);
     } else if (req.url.startsWith('/sync/overlay-config')) {
       handleOverlayConfig(req, res);

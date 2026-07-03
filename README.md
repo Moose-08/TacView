@@ -46,16 +46,43 @@ option that moves the waypoint steering into its own little window, so you
 can park the arrow near your crosshair and keep the rest in a corner - both
 windows remember their positions separately.
 
+Click-through makes the overlay ignore the mouse so it never steals a click
+in-game - turn it on in the gear panel and the window stops responding to
+drags, so position it first. Two hotkeys work while you're in the game: one
+shows/hides the overlay, one cycles which waypoint you're steering to. Both
+are configurable in the gear panel (defaults are Ctrl+Alt+T and Ctrl+Alt+N).
+
 Two things to know: the game has to run in borderless or windowed mode
 (exclusive fullscreen can't be overlaid by anything), and the overlay is a
 separate little window you can drag anywhere - its position is remembered.
+
+## Chat translation
+
+The COMMS tab has an EN button that translates incoming chat to English.
+Lines that aren't English get the translation shown underneath, originals
+stay untouched. It's off by default because it sends chat text to Google
+Translate to do the work - flip it on if you don't mind that. Repeated
+messages are cached so the same "spasibo" doesn't get looked up twice.
 
 ## Waypoints
 
 Right-click the map to drop a waypoint, shift+right-click for a POI.
 Waypoints are consumed when you reach them and the route moves on to the next
 one. POIs stick around. Click a row in the panel to pick which one you're
-steering to.
+steering to, or double-click its label to rename it. The nav readout shows a
+rough time-to-go based on your current speed.
+
+If someone calls out a grid square in chat ("push D4"), the D4 is clickable -
+it drops a POI on that square labelled with the grid ref. You can also hold
+Alt and drag on the map to measure distance and bearing between two points,
+handy for bombing runs and artillery.
+
+## Debrief (beta)
+
+The DEBRIEF tab keeps a rough kill/death tally for the current match and the
+session. It works out which log lines are yours by matching your callsign, so
+set that in the gear panel (or in the tab itself) and know that it's a trial
+feature - it can miss assists and won't be perfect.
 
 ## How it works
 
